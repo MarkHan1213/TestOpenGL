@@ -4,6 +4,7 @@ import android.content.Context;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.opengl.Matrix;
+import android.util.Log;
 
 import com.mark.testopengl.R;
 import com.mark.testopengl.objects.Mallet;
@@ -149,6 +150,6 @@ public class AirHockeyNewRenderer implements GLSurfaceView.Renderer {
     }
 
     public void handleTouchDrag(float normalizedX,float normalizedY){
-
+        Log.e("--Main--","--touch事件---");
     }
 }
