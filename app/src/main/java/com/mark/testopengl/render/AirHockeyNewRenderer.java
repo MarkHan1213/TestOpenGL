@@ -12,6 +12,7 @@ import com.mark.testopengl.objects.Puck;
 import com.mark.testopengl.objects.Table;
 import com.mark.testopengl.programs.ColorShaderProgram;
 import com.mark.testopengl.programs.TextureShaderProgram;
+import com.mark.testopengl.utils.Geometry;
 import com.mark.testopengl.utils.TextureHelper;
 
 import javax.microedition.khronos.egl.EGLConfig;
@@ -26,6 +27,13 @@ public class AirHockeyNewRenderer implements GLSurfaceView.Renderer {
     private final float[] viewMatrix = new float[16];
     private final float[] viewProjectionMatrix = new float[16];
     private final float[] modelViewProjectionMatrix = new float[16];
+
+    private final float[] invertedViewProjectionMatrix = new float[16];
+
+    private final float leftBound = -0.5f;
+    private final float rightBound = 0.5f;
+    private final float farBound = -0.8f;
+    private final float nearBound = 0.8f;
 
 
     private Table table;
@@ -52,6 +60,11 @@ public class AirHockeyNewRenderer implements GLSurfaceView.Renderer {
 
         texture = TextureHelper.loadTexture(context, R.drawable.air_hockey_surface);
 
+        blueMalletPosition = new Geometry.Point(0f, mallet.height / 2, 0.4f);
+        redMalletPosition = new Geometry.Point(0f, mallet.height / 2, -0.4f);
+        puckPosition = new Geometry.Point(0f, puck.height / 2f, 0f);
+        puckVector = new Geometry.Vector(0f, 0f, 0f);
+
     }
 
     @Override
@@ -73,7 +86,30 @@ public class AirHockeyNewRenderer implements GLSurfaceView.Renderer {
     @Override
     public void onDrawFrame(GL10 gl) {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+
+        puckPosition = puckPosition.translate(puckVector);
+        if (puckPosition.x < leftBound + puck.radius || puckPosition.x > rightBound - puck.radius) {
+            puckVector = new Geometry.Vector(-puckVector.x, puckVector.y, puckVector.z);
+            //碰撞减小速度系数,注释掉就不会减速了,永动机
+//            puckVector = puckVector.scale(0.9f);
+        }
+        if (puckPosition.z < farBound + puck.radius || puckPosition.z > nearBound - puck.radius) {
+            puckVector = new Geometry.Vector(puckVector.x, puckVector.y, -puckVector.z);
+            //碰撞减小速度系数,注释掉就不会减速了,永动机
+//            puckVector = puckVector.scale(0.9f);
+        }
+
+
+        puckPosition = new Geometry.Point(
+                clamp(puckPosition.x, leftBound + puck.radius, rightBound - puck.radius),
+                puckPosition.y,
+                clamp(puckPosition.z, farBound + puck.radius, nearBound - puck.radius));
+        //碰撞减小速度系数,注释掉就不会减速了,永动机
+//        puckVector = puckVector.scale(0.99f);
+
         Matrix.multiplyMM(viewProjectionMatrix, 0, projectionMatrix, 0, viewMatrix, 0);
+        Matrix.invertM(invertedViewProjectionMatrix, 0, viewProjectionMatrix, 0);
+
 
 //        textureShaderProgram.useProgram();
 //        textureShaderProgram.setUniforms(projectionMatrix, texture);
@@ -90,17 +126,20 @@ public class AirHockeyNewRenderer implements GLSurfaceView.Renderer {
         table.bindData(textureShaderProgram);
         table.draw();
 
-        positionObjectInScene(0f, mallet.height / 2f, -0.4f);
+//        positionObjectInScene(0f, mallet.height / 2f, -0.4f);
+        positionObjectInScene(redMalletPosition.x, redMalletPosition.y, redMalletPosition.z);
         colorShaderProgram.useProgram();
         colorShaderProgram.setUniforms(modelViewProjectionMatrix, 1f, 0f, 0f);
         mallet.bindData(colorShaderProgram);
         mallet.draw();
 
-        positionObjectInScene(0f, mallet.height / 2f, 0.4f);
+//        positionObjectInScene(0f, mallet.height / 2f, 0.4f);
+        positionObjectInScene(blueMalletPosition.x, blueMalletPosition.y, blueMalletPosition.z);
         colorShaderProgram.setUniforms(modelViewProjectionMatrix, 0f, 0f, 1f);
         mallet.draw();
 
-        positionObjectInScene(0f, puck.height / 2f, 0f);
+//        positionObjectInScene(0f, puck.height / 2f, 0f);
+        positionObjectInScene(puckPosition.x, puckPosition.y, puckPosition.z);
         colorShaderProgram.setUniforms(modelViewProjectionMatrix, 0.8f, 0.8f, 1f);
         puck.bindData(colorShaderProgram);
         puck.draw();
@@ -145,11 +184,93 @@ public class AirHockeyNewRenderer implements GLSurfaceView.Renderer {
 
     }
 
+    private boolean blueMalletPressed = false;
+    private boolean redMalletPressed = false;
+    private Geometry.Point blueMalletPosition;
+    private Geometry.Point redMalletPosition;
+    private Geometry.Point previousBlueMalletPosition;
+    private Geometry.Point previousRedMalletPosition;
+    private Geometry.Point puckPosition;
+    private Geometry.Vector puckVector;
+
     public void handleTouchPress(float normalizedX, float normalizedY) {
+        Geometry.Ray ray = convertNormalized2DPointToRay(normalizedX, normalizedY);
+        Geometry.Sphere malletBoundingSphere = new Geometry.Sphere(new Geometry.Point(
+                blueMalletPosition.x, blueMalletPosition.y, blueMalletPosition.z), mallet.height / 2);
+        blueMalletPressed = Geometry.intersects(malletBoundingSphere, ray);
+
+        Geometry.Sphere redMalletBoundingSphere = new Geometry.Sphere(new Geometry.Point(
+                redMalletPosition.x, redMalletPosition.y, redMalletPosition.z), mallet.height / 2);
+        redMalletPressed = Geometry.intersects(redMalletBoundingSphere, ray);
+    }
+
+    public void handleTouchDrag(float normalizedX, float normalizedY) {
+        if (blueMalletPressed) {
+            Geometry.Ray ray = convertNormalized2DPointToRay(normalizedX, normalizedY);
+
+            Geometry.Plane plane = new Geometry.Plane(new Geometry.Point(0, 0, 0), new Geometry.Vector(0, 1, 0));
+            Geometry.Point touchedPoint = Geometry.intersectionPoint(ray, plane);
+            previousBlueMalletPosition = blueMalletPosition;
+//            blueMalletPosition = new Geometry.Point(touchedPoint.x, mallet.height / 2f, touchedPoint.z);
+            blueMalletPosition = new Geometry.Point(
+                    clamp(touchedPoint.x, leftBound + mallet.radius, rightBound - mallet.radius),
+                    mallet.height / 2f,
+                    clamp(touchedPoint.z, 0f + mallet.radius, nearBound - mallet.radius));
+            float distance = Geometry.vectorBetween(blueMalletPosition, puckPosition).length();
+
+            if (distance < (puck.radius + mallet.radius)) {
+                puckVector = Geometry.vectorBetween(previousBlueMalletPosition, blueMalletPosition);
+            }
+        }
+
+        if (redMalletPressed) {
+            Geometry.Ray ray = convertNormalized2DPointToRay(normalizedX, normalizedY);
+
+            Geometry.Plane plane = new Geometry.Plane(new Geometry.Point(0, 0, 0), new Geometry.Vector(0, 1, 0));
+            Geometry.Point touchedPoint = Geometry.intersectionPoint(ray, plane);
+            previousRedMalletPosition = redMalletPosition;
+//            blueMalletPosition = new Geometry.Point(touchedPoint.x, mallet.height / 2f, touchedPoint.z);
+            redMalletPosition = new Geometry.Point(
+                    clamp(touchedPoint.x, leftBound + mallet.radius, rightBound - mallet.radius),
+                    mallet.height / 2f,
+                    clamp(touchedPoint.z, farBound + mallet.radius,0f - mallet.radius));
+
+            float distance = Geometry.vectorBetween(redMalletPosition, puckPosition).length();
+
+            if (distance < (puck.radius + mallet.radius)) {
+                puckVector = Geometry.vectorBetween(previousRedMalletPosition, redMalletPosition);
+            }
+        }
+    }
+
+    private Geometry.Ray convertNormalized2DPointToRay(float normalizedX, float normalizedY) {
+        final float[] nearPointNdc = {normalizedX, normalizedY, -1, 1};
+        final float[] farPointNdc = {normalizedX, normalizedY, 1, 1};
+
+
+        final float[] nearPointWorld = new float[4];
+        final float[] farPointWorld = new float[4];
+
+        Matrix.multiplyMV(nearPointWorld, 0, invertedViewProjectionMatrix, 0, nearPointNdc, 0);
+        Matrix.multiplyMV(farPointWorld, 0, invertedViewProjectionMatrix, 0, farPointNdc, 0);
+
+        divideByW(nearPointWorld);
+        divideByW(farPointWorld);
+
+        Geometry.Point nearPointRay = new Geometry.Point(nearPointWorld[0], nearPointWorld[1], nearPointWorld[2]);
+        Geometry.Point farPointRay = new Geometry.Point(farPointWorld[0], farPointWorld[1], farPointWorld[2]);
+
+        return new Geometry.Ray(nearPointRay, Geometry.vectorBetween(nearPointRay, farPointRay));
 
     }
 
-    public void handleTouchDrag(float normalizedX,float normalizedY){
-        Log.e("--Main--","--touch事件---");
+    private void divideByW(float[] vector) {
+        vector[0] /= vector[3];
+        vector[1] /= vector[3];
+        vector[2] /= vector[3];
+    }
+
+    private float clamp(float value, float min, float max) {
+        return Math.min(max, Math.max(value, min));
     }
 }

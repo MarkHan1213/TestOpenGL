@@ -9,6 +9,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Button;
 import android.widget.Toast;
 
 import com.mark.testopengl.render.AirHockeyNewRenderer;
@@ -37,7 +38,7 @@ public class MainActivity extends AppCompatActivity {
             // Set the renderer to our demo renderer, defined below.
 //            mGLSurfaceView.setRenderer(new LessonOneRenderer());
             mGLSurfaceView.setRenderer(airHockeyNewRenderer);
-            mGLSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
+//            mGLSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         } else {
             // This is where you could create an OpenGL ES 1.x compatible
             // renderer if you wanted to support both ES 1 and ES 2.
@@ -57,14 +58,14 @@ public class MainActivity extends AppCompatActivity {
                         mGLSurfaceView.queueEvent(new Runnable() {
                             @Override
                             public void run() {
-
+                                airHockeyNewRenderer.handleTouchPress(normalizedX, normalizedY);
                             }
                         });
                     } else if (event.getAction() == MotionEvent.ACTION_MOVE) {
                         mGLSurfaceView.queueEvent(new Runnable() {
                             @Override
                             public void run() {
-
+                                airHockeyNewRenderer.handleTouchDrag(normalizedX, normalizedY);
                             }
                         });
                     }
